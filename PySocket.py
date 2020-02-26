@@ -233,7 +233,7 @@ class PySocket(Device):
                     self.info_stream('ReadUntil(%s): %s' % (
                         argin, r))                    
                     r = r.split(argin,1)                    
-                    argout, self.buffer = argout+r[0], r[1]
+                    argout, self.buffer = argout+r[0]+argin, r[1]
                     self.info_stream('ReadUntil(%s): argout/buffer: %s / %s' 
                         % (argin, argout, self.buffer))
                     break
