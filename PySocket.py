@@ -80,6 +80,14 @@ class PySocket(Device):
         dtype='str', default_value="utf-8"
     )
 
+    Terminator = device_property(
+        dtype='int16',
+    )
+
+    Flush = device_property(
+        dtype='bool', default_value=False
+    )
+
     # ----------
     # Attributes
     # ----------
@@ -146,6 +154,7 @@ class PySocket(Device):
     def Reconnect(self):
         # PROTECTED REGION ID(PySocket.Reconnect) ENABLED START #
         try:
+            self.info_stream('Reconnect()')
             self.Close()
             self.sobj = socket.socket()
             self.sobj.setblocking(False)
@@ -153,6 +162,11 @@ class PySocket(Device):
             argin = (str(self.Hostname),int(self.Port))
             self.info_stream('Reconnect(%s)' % str(argin))
             self.sobj.connect(argin)
+
+            if self.Flush:
+                time.sleep(.010)
+                self.sobj.recv(1024) #Flushing
+                
             self.process_state(DevState.OPEN)
             self.info_stream('Reconnected!')
         except Exception as e:
@@ -165,15 +179,20 @@ class PySocket(Device):
     @DebugIt()
     def Write(self, argin):
         # PROTECTED REGION ID(PySocket.Write) ENABLED START #
-        self.info_stream('Write(%s(%s))' % (type(argin),argin))
+
+        self.info_stream('<'*80)
         
         try:
             if self.AutoReconnect:
                 if self.get_state() != DevState.OPEN or not self.Check():
                     self.Reconnect()
-            
-            self.sobj.send((str(argin).encode(self.Encoding)))
 
+            if self.Terminator and not argin.endswith(chr(self.Terminator)):
+                argin = argin + chr(self.Terminator)
+                
+            argin = str(argin).encode(self.Encoding)
+            self.sobj.send(argin)
+            self.info_stream('Write(%s)' % repr(argin))
         except Exception as e:
             self.process_exception(e,traceback.format_exc(),True)
             
@@ -210,7 +229,8 @@ class PySocket(Device):
     @DebugIt()
     def ReadUntil(self, argin):
         # PROTECTED REGION ID(PySocket.ReadUntil) ENABLED START #
-        self.info_stream('ReadUntil(%s): buffer = %s' % (argin,self.buffer))
+        self.info_stream('ReadUntil(%s): buffer = %s' 
+                         % (repr(argin),repr(self.buffer)))
 
         if self.AutoReconnect:
             if self.get_state() != DevState.OPEN or not self.Check():
@@ -230,11 +250,11 @@ class PySocket(Device):
 
                 self.buffer = ''
                 if argin and argin in r:
-                    self.info_stream('ReadUntil(%s): %s' % (
+                    self.debug_stream('ReadUntil(%s): %s' % (
                         argin, r))                    
                     r = r.split(argin,1)                    
                     argout, self.buffer = argout+r[0]+argin, r[1]
-                    self.info_stream('ReadUntil(%s): argout/buffer: %s / %s' 
+                    self.debug_stream('ReadUntil(%s): argout/buffer: %s / %s' 
                         % (argin, argout, self.buffer))
                     break
                 elif not argin and not r and not self.Readtimeout:
@@ -248,6 +268,8 @@ class PySocket(Device):
                              % (1e3*(time.time()-t0)))
         except Exception as e:
             self.process_exception(e,traceback.format_exc(),True)
+        if argout:
+            self.info_stream('ReadUntil():argout: %s' % repr(argout))
         return argout
         # PROTECTED REGION END #    //  PySocket.ReadUntil
 
@@ -256,6 +278,7 @@ class PySocket(Device):
     @DebugIt()
     def Close(self):
         # PROTECTED REGION ID(PySocket.Close) ENABLED START #
+        self.info_stream('Close()')
         if self.sobj is not None:
             try:
                 self.sobj.close()
@@ -273,7 +296,7 @@ class PySocket(Device):
     def Check(self):
         # PROTECTED REGION ID(PySocket.Check) ENABLED START #
         check = select.select([self.sobj],[self.sobj],[])
-        self.info_stream('Check(): %s' % str(check))
+        self.debug_stream('Check(): %s' % str(check))
         if not any(check):
             self.process_exception(tr='Check():Socket closed on server side?')
             
