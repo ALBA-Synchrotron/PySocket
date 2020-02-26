@@ -35,16 +35,23 @@ class PySocket(Device):
     """
     __metaclass__ = DeviceMeta
     # PROTECTED REGION ID(PySocket.class_variable) ENABLED START #
+    
     def process_exception(self, e=None, tr = None, throw = True):
         exc = tr or str(e) or traceback.format_exc()
         exc = "Unable to connect to %s:%s\n%s" % (
             self.Hostname, self.Port, exc)
         self.set_status(exc)
-        self.set_state(DevState.FAULT)
-        self.push_change_event('State',self.get_state())
+        self.process_state(DevState.FAULT)
         self.error_stream(exc)
         if throw and e:
             raise e
+        
+    def process_state(self, state):
+        old = self.get_state()
+        self.info_stream('%s => %s' % (old,state))
+        self.set_state(state)
+        self.push_change_event('State',self.get_state())        
+        
     # PROTECTED REGION END #    //  PySocket.class_variable
 
     # -----------------
@@ -92,11 +99,15 @@ class PySocket(Device):
     def init_device(self):
         Device.init_device(self)
         # PROTECTED REGION ID(PySocket.init_device) ENABLED START #
-        self.sobj = None
-        self.set_state(DevState.CLOSE)
-        self.set_change_event('State',True,False)
-        self.push_change_event('State',self.get_state())
-        self.buffer = ''
+        self.info_stream('init_device()')
+
+        if not hasattr(self,'sobj'):
+            self.sobj = None
+            self.set_change_event('State',True,False)
+            self.process_state(DevState.CLOSE)
+            self.buffer = ''
+            
+        self.info_stream('init_device(): done')
         # PROTECTED REGION END #    //  PySocket.init_device
 
     def always_executed_hook(self):
@@ -106,6 +117,7 @@ class PySocket(Device):
 
     def delete_device(self):
         # PROTECTED REGION ID(PySocket.delete_device) ENABLED START #
+        self.info_stream('delete_device()')
         self.Close()
         # PROTECTED REGION END #    //  PySocket.delete_device
 
@@ -141,8 +153,7 @@ class PySocket(Device):
             argin = (str(self.Hostname),int(self.Port))
             self.info_stream('Reconnect(%s)' % str(argin))
             self.sobj.connect(argin)
-            self.set_state(DevState.OPEN)
-            self.push_change_event('State',self.get_state())
+            self.process_state(DevState.OPEN)
             self.info_stream('Reconnected!')
         except Exception as e:
             self.process_exception(e,traceback.format_exc(),True)
@@ -249,8 +260,7 @@ class PySocket(Device):
             try:
                 self.sobj.close()
                 self.sobj = None
-                self.set_state(DevState.CLOSE)
-                self.push_change_event('State',self.get_state())
+                self.process_state(DevState.CLOSE)
             except Exception as e:
                 self.process_exception(e,traceback.format_exc(),True)
         # PROTECTED REGION END #    //  PySocket.Close
